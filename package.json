@@ -1,0 +1,11 @@
+{
+    "name": "gatsby-plugin-discord",
+    "description": "Fetches data from your Discord server at build time and provides some pre-built components for displaying it.",
+    "author": "Alex Crocker <hello@crock.dev>",
+    "private": false,
+    "dependencies": {
+        "discord.js": "^12.5.1",
+        "gatsby": "^2.31.1",
+        "node-fetch": "^2.6.1"
+    }
+}
