@@ -1,171 +1,119 @@
 const Discord = require('discord.js');
 
-exports.sourceNodes = async (
-    { actions, createNodeId, createContentDigest },
-    { serverId, botToken, fetchMembers, fetchRoles, fetchChannels },
-    done
-) => {
+const discordCDN = 'https://cdn.discordapp.com/'
+
+const bot = new Discord.Client();
+
+exports.sourceNodes = async ({ actions, reporter, createNodeId, createContentDigest }, { serverId, botToken }) => {
     const { createNode } = actions
 
     if (!serverId) {
-        throw new Error('serverId config option is not set on gatsby-plugin-discord')
+        let error = 'serverId config option is not set on gatsby-plugin-discord'
+        reporter.error(error, new Error(error))
+        process.exit(1)
     }
     
     if (!botToken) {
-        throw new Error('botToken config option is not set on gatsby-plugin-discord')
+        let error = 'botToken config option is not set on gatsby-plugin-discord'
+        reporter.error(error, new Error(error))
+        process.exit(1)
     }
 
-    const bot = new Discord.Client()
-
-    bot.on('ready', async () => {
+    await bot.login(botToken)
+    bot.once('ready', async () => {
         console.log(`Logged in as ${bot.user.tag}!`);
 
-        bot.guilds.fetch(serverId)
-            .then(guild => {
-                console.log(`Fetched guild: ${guild.name}`)
-                const { id, name, icon, splash, members, roles, channels, ...other } = guild
-
-                let memberNodes = []
-                let roleNodes = []
-                let channelNodes = []
-
-                try {
-                    if (fetchMembers) {
-                        members.fetch({force: true})
-                            .then(items => {
-                                items.forEach(member => {    
-                                    const { id, user, ...other } = member
-
-                                    let userNode;
-                                    user.fetch({force: true})
-                                        .then(user => {
-                                                const { id, name, ...other } = user
-                                                let nodeMeta = {
-                                                    id: createNodeId(id),
-                                                    name,
-                                                    userId: id,
-                                                    internal: {
-                                                        type: `DiscordUser`,
-                                                        mediaType: `application/json`,
-                                                        content: JSON.stringify(user),
-                                                        contentDigest: createContentDigest(user)
-                                                    },
-                                                    ...other
-                                                }
-                    
-                                                userNode = createNode(nodeMeta)
-                                                console.log(`Created node for Discord user ${name}: ${nodeMeta.id}`)
-                                        })
-        
-                                    let nodeMeta = {
-                                        id: createNodeId(id),
-                                        memberId: id,
-                                        user: userNode,
-                                        internal: {
-                                            type: `DiscordGuildMember`,
-                                            mediaType: `application/json`,
-                                            content: JSON.stringify(member),
-                                            contentDigest: createContentDigest(member)
-                                        },
-                                        ...other
-                                    }
-        
-                                    memberNodes.push(createNode(nodeMeta))
-                                    console.log(`Created node for Discord guild member: ${nodeMeta.id}`)
-                                })
-                            })
-                            .catch(console.error)
-                    }
-                } catch(error) {
-                    console.error(`Couldn't fetch members.`)
-                }
-
-                try {
-                    if (fetchRoles) {
-                        roles.cache.forEach(role => {
-                            const { id, name, ...other } = role
-
-                            let nodeMeta = {
-                                id: createNodeId(id),
-                                name,
-                                roleId: id,
-                                internal: {
-                                    type: `DiscordGuildRole`,
-                                    mediaType: `application/json`,
-                                    content: JSON.stringify(role),
-                                    contentDigest: createContentDigest(role)
-                                },
-                                ...other
-                            }
-
-                            roleNodes.push(createNode(nodeMeta))
-                            console.log(`Created node for Discord role ${name}: ${nodeMeta.id}`)
-                        })
-                    }
-                } catch(error) {
-                    console.error(`Couldn't fetch roles.`)
-                }
-
-                try {
-                    if (fetchChannels) {
-                        channels.cache.forEach(channel => {
-                            const { id, name, ...other } = channel
-
-                            let nodeMeta = {
-                                id: createNodeId(id),
-                                name,
-                                channelId: id,
-                                internal: {
-                                    type: `DiscordGuildChannel`,
-                                    mediaType: `application/json`,
-                                    content: JSON.stringify(channel),
-                                    contentDigest: createContentDigest(channel)
-                                },
-                                ...other
-                            }
-
-                            channelNodes.push(createNode(nodeMeta))
-                            console.log(`Created node for Discord channel ${name}: ${nodeMeta.id}`)
-                        })
-                    }
-                } catch(error) {
-                    console.error(`Couldn't fetch channels.`)
-                }
-
-                try {
-                    const discordCDN = 'https://cdn.discordapp.com/'
-            
-                    const nodeMeta = {
-                        id: createNodeId(id),
-                        guildId: id,
-                        name,
-                        icon,
-                        iconUrl: `${discordCDN}icons/${serverId}/${icon}.png`,
-                        splash,
-                        splashUrl: `${discordCDN}splashes/${serverId}/${splash}.png`,
-                        members: memberNodes || null,
-                        roles: roleNodes || null,
-                        channels: channelNodes || null,
-                        internal: {
-                            type: `DiscordServer`,
-                            mediaType: `application/json`,
-                            content: JSON.stringify(guild),
-                            contentDigest: createContentDigest(guild)
-                        },
-                        ...other
-                    }
-            
-                    createNode(nodeMeta)
-                    console.log(`Created node for Discord server ${name}: ${nodeMeta.id}`)
-                    done()
-                } catch (error) {
-                    console.error(error)
-                    process.exit(1)
-                }
-            })
+        const guild = await bot.guilds.fetch(serverId, false, true)
             .catch(console.error);
 
-    });
+            reporter.info(`Fetched guild: ${guild.name}`)
+            const { id, ...other } = guild
 
-    bot.login(botToken)
+            createNode({
+                id: createNodeId(id),
+                guildId: id,
+                iconUrl: `${discordCDN}icons/${serverId}/${guild.icon}.png`,
+                splashUrl: `${discordCDN}splashes/${serverId}/${guild.splash}.png`,
+                parent: null,
+                children: [],
+                internal: {
+                    type: `DiscordGuild`,
+                    mediaType: `application/json`,
+                    content: JSON.stringify({guild}),
+                    contentDigest: createContentDigest(guild)
+                },
+                ...other
+            })
+
+            reporter.info(`Created node for Discord server ${guild.name}`)
+    })
+
+}
+
+exports.onCreateNode = ({ node, actions, reporter }, { shouldFetchMembers, shouldFetchUserDetails }) => {
+    const { createNodeField, createNodeId, createContentDigest } = actions
+        
+    if (node.internal.type === 'DiscordGuild') {
+
+        if (shouldFetchMembers) {
+            const { guild } = node.content
+            guild.members.fetch({force: true})
+                .then(members => {
+                    return createNodeField({
+                        node,
+                        name: 'members',
+                        value: members.map(member => {    
+                            const { id, ...other } = member
+                
+                            reporter.info(`Created node for Discord guild member ${id}`)
+                            return createNode({
+                                id: createNodeId(id),
+                                memberId: id,
+                                parent: node,
+                                children: [],
+                                internal: {
+                                    type: `DiscordGuildMember`,
+                                    mediaType: `application/json`,
+                                    content: JSON.stringify({member}),
+                                    contentDigest: createContentDigest(member)
+                                },
+                                ...other
+                            })
+                        })
+                    })
+                })
+                .catch(console.error)
+        }
+    }
+
+    if (node.internal.type === 'DiscordGuildMember') {
+        if (shouldFetchUserDetails) {
+            const { member: { memberId, parent: guild } } = node.content
+            const member = guild.members.cache.get(memberId)
+            member.user.fetch({force: true})
+                .then(user => {
+                    const { id, ...other } = user
+                    reporter.info(`Created node for Discord user ${user.username}`)
+                    return createNodeField({
+                        node,
+                        name: 'user',
+                        value: createNode({
+                            id: createNodeId(id),
+                            userId: id,
+                            parent: node,
+                            children: [],
+                            internal: {
+                                type: `DiscordUser`,
+                                mediaType: `application/json`,
+                                content: JSON.stringify({user}),
+                                contentDigest: createContentDigest(user)
+                            },
+                            ...other
+                        })
+                    })
+                })
+                .catch(console.error)
+        }
+    }
+
 }
